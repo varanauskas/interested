@@ -1,0 +1,7 @@
+{
+    "compilerOptions": {
+        "lib": ["esnext", "DOM"],
+        "allowJs": true,
+        "noEmit": true
+    }
+}
