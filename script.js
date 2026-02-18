@@ -54,15 +54,6 @@ const DATA = (function readData() {
     return DATA;
 })();
 
-const change = Temporal.PlainDate.from("2026-08-22");
-for (let i = 0; i < DATA.payments.length; i++) {
-    if (Temporal.PlainDate.compare(DATA.payments[i].date, change) <= 0) continue;
-    if (i % 2 === 0) {
-        DATA.payments[i].amounts[0] = DATA.payments[i].amounts[1];
-        DATA.payments[i].amounts[1] = 0;
-    }
-}
-
 const [tBody] = /** @type {HTMLTableElement} */ (table).tBodies;
 
 let principal = DATA.principal / 100;
@@ -118,9 +109,7 @@ function insertPayment(date, amounts) {
 const [firstPayment, ...restPayments] = DATA.payments;
 insertPayment(firstPayment.date, firstPayment.amounts);
 
-let i = 0;
-for (const now = Temporal.Now.plainDateISO(); i < restPayments.length && Temporal.PlainDate.compare(restPayments[i].date, now) <= 0; i++) {
-    const { date, amounts } = restPayments[i];
+function addPayment({ date, amounts }) {
     const nextDayAfterLastPayment = lastPayment.date.add({ days: 1 });
     if (!nextDayAfterLastPayment.equals(date)) {
         const dayBeforeCurrentPayment = date.subtract({ days: 1 });
@@ -134,20 +123,14 @@ for (const now = Temporal.Now.plainDateISO(); i < restPayments.length && Tempora
     insertPayment(date, amounts);
 }
 
+let i = 0;
+for (const now = Temporal.Now.plainDateISO(); i < restPayments.length && Temporal.PlainDate.compare(restPayments[i].date, now) <= 0; i++) {
+    addPayment(restPayments[i]);
+}
+
 insertRow("Total", totalPaymentAmounts, format(totalInterest), principal).classList.add("total");
 
 for (; i < restPayments.length; i++) {
-    const { date, amounts } = restPayments[i];
-    const nextDayAfterLastPayment = lastPayment.date.add({ days: 1 });
-    if (!nextDayAfterLastPayment.equals(date)) {
-        const dayBeforeCurrentPayment = date.subtract({ days: 1 });
-        insertRow(
-            nextDayAfterLastPayment.equals(dayBeforeCurrentPayment) ? nextDayAfterLastPayment.toString() : `${nextDayAfterLastPayment} - ${dayBeforeCurrentPayment}`,
-            [undefined, undefined],
-            format(addInterest(principal * Math.pow(1 + DAILY_INTEREST_RATE, dayBeforeCurrentPayment.since(lastPayment.date).total("days")) - principal)),
-            principal
-        ).classList.add("intermediate");
-    }
-    insertPayment(date, amounts);
+    addPayment(restPayments[i]);
 }
 insertRow("Total", totalPaymentAmounts, format(totalInterest), principal).classList.add("total");
