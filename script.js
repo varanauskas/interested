@@ -6,14 +6,14 @@ const { format } = new Intl.NumberFormat(params.get("locale") ?? undefined, { st
 // Input data
 const DATA = (function readData() {
     /**
-     * Binary Format:
-     * Uint32 - AMOUNT (in cents)
-     * Uint16 - DATE/PERCENT (date as days since 1970-01-01, percent as basis points)
-     * Uint8 - COUNT
-     * 
-     * AMOUNT(principal)+PERCENT(interest)+COUNT(recipients)+COUNT(payments)+[payments * [DATE(payment) + recipients * AMOUNT(payment)]]
+     * @param {number} epochDay
      */
-    const inputView = new DataView(Uint8Array.fromBase64(location.hash.substring(1), { alphabet: "base64url" }).buffer);
+    function fromEpochDay(epochDay) {
+        const epoch = Temporal.PlainDate.from("1970-01-01");
+        return epoch.add({ days: epochDay });
+    }
+
+    const dataView = new DataView(Uint8Array.fromBase64(location.hash.substring(1), { alphabet: "base64url" }).buffer);
     /**
      * @type {{
      *  principal: number,
@@ -22,36 +22,66 @@ const DATA = (function readData() {
      *  payments: { date: Temporal.PlainDate, amounts: number[] }[]
      * }}
      */
-    const DATA = { payments: [] };
-    let readOffset = 0;
-    /**
-     * @param {8 | 16 | 32} size
-     */
+    const INPUT = { payments: [] };
+    let index = 0;
     function readUint(size) {
-        const value = inputView[`getUint${size}`](readOffset);
-        readOffset += size / 8;
+        const value = dataView[`getUint${size}`](index);
+        index += size / 8;
         return value;
     }
-    DATA.principal = readUint(32);
-    DATA.interest = readUint(16);
-    DATA.recipients = readUint(8);
-    const paymentCount = readUint(8);
-    /**
-     * @param {number} epochDay
-     */
-    function fromEpochDay(epochDay) {
-        const epoch = Temporal.PlainDate.from("1970-01-01");
-        return epoch.add({ days: epochDay });
-    }
-    for (let i = 0; i < paymentCount; i++) {
-        const date = fromEpochDay(readUint(16));
+
+    INPUT.principal = readUint(32);
+    INPUT.interest = readUint(16);
+    INPUT.recipients = readUint(8);
+
+    const customPaymentCount = readUint(8);
+    for (let i = 0; i < customPaymentCount; i++) {
         const amounts = [];
-        for (let j = 0; j < DATA.recipients; j++) {
+        for (let j = 0; j < INPUT.recipients; j++) {
             amounts.push(readUint(32));
         }
-        DATA.payments.push({ date, amounts });
+        INPUT.payments.push({
+            date: fromEpochDay(readUint(16)),
+            amounts,
+        });
     }
-    return DATA;
+
+    const fixedAmountPaymentCount = readUint(8);
+    for (let i = 0; i < fixedAmountPaymentCount; i++) {
+        const amounts = [];
+        for (let j = 0; j < INPUT.recipients; j++) {
+            amounts.push(readUint(32));
+        }
+        const dateCount = readUint(8);
+        for (let j = 0; j < dateCount; j++) {
+            INPUT.payments.push({
+                date: fromEpochDay(readUint(16)),
+                amounts,
+            });
+        }
+    }
+
+    const dayOfMonthPaymentCount = readUint(8);
+    console.log({ dayOfMonthPaymentCount });
+    for (let i = 0; i < dayOfMonthPaymentCount; i++) {
+        const amounts = [];
+        for (let j = 0; j < INPUT.recipients; j++) {
+            amounts.push(readUint(32));
+        }
+        const firstDate = fromEpochDay(readUint(16));
+        const lastDate = fromEpochDay(readUint(16));
+        let date = firstDate;
+        while (Temporal.PlainDate.compare(lastDate, date) >= 0) {
+            INPUT.payments.push({
+                date,
+                amounts,
+            });
+            date = date.add({ months: 1 });
+        }
+    }
+
+    INPUT.payments.sort((a, b) => Temporal.PlainDate.compare(a.date, b.date));
+    return INPUT;
 })();
 
 const [tBody] = /** @type {HTMLTableElement} */ (table).tBodies;
