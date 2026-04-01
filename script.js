@@ -1,7 +1,7 @@
 // INPUT
 // Params for formatting the currency, e.g. ?locale=en-US&currency=USD
 const params = new URLSearchParams(location.search);
-const { format } = new Intl.NumberFormat(params.get("locale") ?? undefined, { style: "currency", currency: params.get("currency") ?? undefined });
+const { format } = new Intl.NumberFormat(params.get("locale") ?? "lt-LT", { style: "currency", currency: params.get("currency") ?? "EUR" });
 
 // Input data
 const DATA = (function readData() {
